@@ -218,14 +218,49 @@ format_pr_template() {
     strip_lines
 }
 
+# Finds the appropriate $EDITOR.
+#
+# First, check if $GIT_EDITOR is assigned. If so use it.
+#
+# Next, check if `core.editor` is set in either `~/.gitconfig` or
+# `.git/config`. If so, use it.
+#
+# Next, use `$EDITOR` if available.
+#
+# Finally, fallback to `nano`.
+find_editor() {
+  local editor
+
+  editor=$(git var GIT_EDITOR)
+
+  if [[ "$editor" ]]; then
+    echo "$editor"
+    return 0
+  fi
+
+  editor=$(git config core.editor)
+
+  if [[ "$editor" ]]; then
+    echo "$editor"
+    return 0
+  fi
+
+  echo "${EDITOR:-nano}"
+}
+
 # Opens the Pull Request in $EDITOR.
 edit_pr() {
-  case "$EDITOR" in
+  local editor
+
+  editor=$(find_editor)
+
+  # Purposely not quoting $editor below to allow passing args in `GIT_EDITOR`
+  case "$editor" in
     gvim|mvim|vim)
-      "$EDITOR" --cmd "set ft=gitcommit tw=0 wrap lbr" "$PR_FILE"
+      $editor --cmd "set ft=gitcommit tw=0 wrap lbr" "$PR_FILE"
       ;;
     *)
-      "$EDITOR" "$PR_FILE"
+      $editor "$PR_FILE"
       ;;
   esac
 }
