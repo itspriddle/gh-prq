@@ -401,6 +401,9 @@ main() {
 
   GIT_COMMENT_CHAR=$(git_comment_char)
 
+  # TODO: if the template file is present, scrub everything after scissors and
+  # just replace the body. That way we'll have fresh git history, etc if it
+  # changed for some reason.
   if [[ ! -f "$PR_FILE" ]]; then
     generate_pr_template "$base" "$head" > "$PR_FILE"
   fi
