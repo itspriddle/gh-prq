@@ -393,8 +393,16 @@ main() {
   # problem was corrected).
   trap '[[ "${RECOVER:-0}" -eq 1 ]] || rm -f "$PR_FILE"' EXIT
 
+  local branch
+  branch=$(git symbolic-ref --short "$head")
+
+  if [[ "$branch" =~ ^(master|main)$ ]]; then
+    warn "Error: You are on \`$branch', checkout a new branch first!"
+    return 1
+  fi
+
   if [[ "$push" ]]; then
-    git push -u origin "$(git symbolic-ref --short "$head")"
+    git push -u origin "$branch"
   fi
 
   GIT_COMMENT_CHAR=$(git_comment_char)
