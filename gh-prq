@@ -68,7 +68,7 @@ fi
 set -euo pipefail
 
 # gh-prq version
-VERSION="0.0.1"
+VERSION="0.1.0"
 
 # Path to the file used to edit a Pull Request message
 PR_FILE=".git/PULLREQ_EDITMSG"
@@ -371,7 +371,7 @@ main() {
         open=1
         shift
         ;;
-      -V | --version | version)
+      -V|--version|version)
         echo "$(program_name) v$VERSION"
         echo "https://github.com/itspriddle/gh-prq"
         return 0
