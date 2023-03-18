@@ -432,7 +432,7 @@ main() {
     RECOVER=1
 
     warn "Failed to create Pull Request!"
-    echo "$output"
+    warn "$output"
     return 1
   fi
 }
