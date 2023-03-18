@@ -39,13 +39,17 @@ fi
 
 set -euo pipefail
 
-# gh-orgtools version
+# gh-prq version
 VERSION="0.0.1"
 
+# Path to the file used to edit a Pull Request message
 PR_FILE=".git/PULLREQ_EDITMSG"
 
+# Path to the file used as a Pull Request message template
 PR_TEMPLATE_FILE=".github/pull_request_template.md"
 
+# String used to separate content in a Pull Request message from help text.
+# All content found below this line will be stripped and not sent to GitHub.
 SCISSORS="------------------------ >8 ------------------------"
 
 # Prints the given message to STDERR
@@ -68,7 +72,7 @@ program_name() {
   printf "%s\\n" "${0//*\/gh-/gh }"
 }
 
-# Finds the title in the given file (ie: the first line).
+# Finds the PR title from STDIN (ie: the first line).
 find_title() {
   local content
 
@@ -77,7 +81,7 @@ find_title() {
   sed -n "1p" <<< "$content"
 }
 
-# Finds the body in the given file (ie: all but the first line). Note that
+# Finds the PR body from STDIN (ie: all but the first line). Note that
 # leading/trailing blank lines are stripped too.
 find_body() {
   local content
@@ -102,14 +106,20 @@ strip_lines() {
   '
 }
 
-# Fetch the git comment character
+# Prints the last commit message. Used when git's `core.commentChar` is set to
+# `auto` to determine what the comment character should be.
+git_last_commit_message() {
+  git show --format='%s%n%n%b'
+}
+
+# Prints the git comment character.
 #
 # This can be one of #, ;, @, !, $, %, ^, &, |, :, or auto.
 #
-# If auto is supplied, each character above is scaned in STDIN. If no lines
+# If auto is supplied, each character above is scaned from STDIN. If no lines
 # start with that character, it is returned.
 git_comment_char() {
-  local char input="$1" line
+  local char line
 
   char=$(git config core.commentChar)
   : "${char:=#}"
@@ -117,6 +127,8 @@ git_comment_char() {
   if [[ "$char" = auto ]]; then
     local comment_char_candidates="#;@!$%^&|:"
     local i=0
+    local last_commit
+    last_commit=$(git_last_commit_message)
 
     while (( i < ${#comment_char_candidates} )); do
       char="${comment_char_candidates:i:1}"
@@ -130,7 +142,7 @@ git_comment_char() {
           found=1
           break
         fi
-      done <<< "$input"
+      done <<< "$last_commit"
 
       if [[ "$found" = 0 ]]; then
         break
@@ -145,6 +157,12 @@ git_comment_char() {
   fi
 }
 
+# Prints the git history for the given range. This is included in the Pull
+# Request template to help the author, but not sent to GitHub when creating
+# the Pull Request.
+#
+# $1 - base branch
+# $2 - head branch
 git_history() {
   local base="$1" head="$2"
 
@@ -156,10 +174,16 @@ git_history() {
     "$base...$head"
 }
 
+# Generates the Pull Request template file.
+#
+# If a .github/issues_template.md file exists, it will be included in the
+# output. A list of commits between the base branch and head branch will also
+# be printed.
+#
+# $1 - base branch
+# $2 - head branch
 generate_pr_template() {
-  local base=master comment_char
-
-  comment_char=$(git_comment_char "")
+  local base="$1" head="$2"
 
   {
     echo
@@ -169,34 +193,32 @@ generate_pr_template() {
       cat "$PR_TEMPLATE_FILE"
     fi
 
-    echo "$comment_char $SCISSORS"
-    echo "$comment_char Do not modify or remove the line above."
-    echo "$comment_char Everything below it will be ignored."
+    echo "$GIT_COMMENT_CHAR $SCISSORS"
+    echo "$GIT_COMMENT_CHAR Do not modify or remove the line above."
+    echo "$GIT_COMMENT_CHAR Everything below it will be ignored."
     echo
-    echo "Requesting a pull to BASE from HEAD"
+    echo "Requesting a pull to $base from $head"
     echo
     echo "Write a message for this pull request. The first block"
     echo "of text is the title and the rest is the description."
     echo
     echo "Changes:"
+    echo
 
-    git_history master HEAD
-
-    # last_commit_message
+    git_history "$base" "$head"
   }
 }
 
+# Formats the Pull Request template (via STDIN) after having been written by
+# $EDITOR. This strips away the first git scissors line and all lines after
+# it.
 format_pr_template() {
-  local comment_char
-
-  comment_char=$(git_comment_char "")
-
-  awk -v scissors="$comment_char $SCISSORS" \
+  awk -v scissors="$GIT_COMMENT_CHAR $SCISSORS" \
     '$0 ~ scissors { exit }; { print }' |
     strip_lines
 }
 
-# Opens the PR in $EDITOR.
+# Opens the Pull Request in $EDITOR.
 edit_pr() {
   case "$EDITOR" in
     gvim|mvim|vim)
@@ -209,6 +231,8 @@ edit_pr() {
 }
 
 # Opens the URL in a web browser
+#
+# $1 - URL to open
 open_url() {
   local url="$1"
 
@@ -225,6 +249,9 @@ open_url() {
   esac
 }
 
+# Copies the given URL to the clipboard.
+#
+# $1 - URL to copy
 copy_url() {
   local url="$1"
 
@@ -241,26 +268,11 @@ copy_url() {
   esac
 }
 
-# FLAGS
-#   -a, --assignee login       Assign people by their login. Use "@me" to self-assign.
-#   -B, --base branch          The branch into which you want your code merged
-#   -b, --body string          Body for the pull request
-#   -F, --body-file file       Read body text from file (use "-" to read from standard input)
-#   -d, --draft                Mark pull request as a draft
-#   -f, --fill                 Do not prompt for title/body and just use commit info
-#   -H, --head branch          The branch that contains commits for your pull request (default: current branch)
-#   -l, --label name           Add labels by name
-#   -m, --milestone name       Add the pull request to a milestone by name
-#       --no-maintainer-edit   Disable maintainer's ability to modify pull request
-#   -p, --project name         Add the pull request to projects by name
-#       --recover string       Recover input from a failed run of create
-#   -r, --reviewer handle      Request reviews from people or teams by their handle
-#   -t, --title string         Title for the pull request
-#   -w, --web                  Open the web browser to create a pull request
-
-# INHERITED FLAGS
-#       --help                     Show help for command
-#   -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format
+# Creates a pull request via `gh pr create`.
+#
+# $1 - PR title
+# $2 - PR body
+# $@ - all remaining arguments are passed directly to `gh pr`
 create_pull_request() {
   local title="$1" body="$2"
 
@@ -280,7 +292,7 @@ print_help() {
 
 # Main program
 main() {
-  local base head template body title output url copy open push
+  local base=master head=HEAD template body title output url copy open push
 
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
@@ -318,11 +330,13 @@ main() {
   trap '[[ "${RECOVER:-0}" -eq 1 ]] || rm -f "$PR_FILE"' EXIT
 
   if [[ "$push" ]]; then
-    git push -u origin HEAD
+    git push -u origin "$(git symbolic-ref --short "$head")"
   fi
 
+  GIT_COMMENT_CHAR=$(git_comment_char)
+
   if [[ ! -f "$PR_FILE" ]]; then
-    generate_pr_template > "$PR_FILE"
+    generate_pr_template "$base" "$head" > "$PR_FILE"
   fi
 
   edit_pr "$PR_FILE"
