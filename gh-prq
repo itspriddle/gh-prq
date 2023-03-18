@@ -210,15 +210,13 @@ git_history() {
 #
 # $1 - base branch
 # $2 - head branch
+# $3 - content to prepend
 generate_pr_template() {
-  local base="$1" head="$2"
+  local base="$1" head="$2" prepend="${3-}"
 
   {
-    echo
-    echo
-
-    if [[ -r "$PR_TEMPLATE_FILE" ]]; then
-      cat "$PR_TEMPLATE_FILE"
+    if [[ "$prepend" ]]; then
+      echo "$prepend"
     fi
 
     echo "$GIT_COMMENT_CHAR $SCISSORS"
@@ -401,11 +399,21 @@ main() {
 
   GIT_COMMENT_CHAR=$(git_comment_char)
 
-  # TODO: if the template file is present, scrub everything after scissors and
-  # just replace the body. That way we'll have fresh git history, etc if it
-  # changed for some reason.
   if [[ ! -f "$PR_FILE" ]]; then
-    generate_pr_template "$base" "$head" > "$PR_FILE"
+    {
+      echo
+      echo
+      generate_pr_template "$base" "$head" "$(cat "$PR_TEMPLATE_FILE")"
+    } > "$PR_FILE"
+  else
+    local prepend
+
+    prepend=$(format_pr_template < "$PR_FILE")
+
+    {
+      echo "$prepend"
+      generate_pr_template "$base" "$head"
+    } > "$PR_FILE"
   fi
 
   edit_pr "$PR_FILE"
