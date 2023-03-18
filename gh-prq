@@ -313,7 +313,7 @@ main() {
         echo "https://github.com/itspriddle/gh-prq"
         return 0
         ;;
-      -h|--help)
+      -h|--help|help)
         print_help "$1"
         return 0
         ;;
@@ -327,6 +327,9 @@ main() {
     esac
   done
 
+  # Cleanup the $PR_FILE unless RECOVER is set to 1. This allows editing the
+  # PR message again if `gh pr create` failes for some reason (and the
+  # problem was corrected).
   trap '[[ "${RECOVER:-0}" -eq 1 ]] || rm -f "$PR_FILE"' EXIT
 
   if [[ "$push" ]]; then
@@ -362,7 +365,7 @@ main() {
   else
     RECOVER=1
 
-    warn "Failed to create pull request!"
+    warn "Failed to create Pull Request!"
     echo "$output"
     return 1
   fi
