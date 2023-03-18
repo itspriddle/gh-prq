@@ -1,35 +1,357 @@
 #!/usr/bin/env bash
-set -e
+# Usage: gh prq [OPTIONS]
+#
+# NAME
+#   gh prq -- Create GitHub PRs with your $EDITOR
+#
+# SYNOPSIS
+#   gh prq [OPTIONS]
+#
+# DESCRIPTION
+#   FIXME
+#
+# OPTIONS
+#   -P, --push
+#     Push the branch upstream first.
+#
+#   -C, --copy
+#     Copy PR URL to clipboard.
+#
+#   -O, --open
+#     Open the URL in your web browser.
+#
+# REPORTING BUGS
+#   Issues can be reported on GitHub:
+#
+#   https://github.com/itspriddle/gh-prq/issues
+#
+# LICENSE
+#   MIT License
+#
+# SEE ALSO
+#   gh(1)
 
-echo "Hello gh-prq!"
+# Enable debug mode
+if [[ "$DEBUG_GH_PRQ" ]]; then
+  export PS4='+ [${BASH_SOURCE##*/}:$LINENO] '
+  set -x
+fi
 
-# Snippets to help get started:
+set -euo pipefail
 
-# Determine if an executable is in the PATH
-# if ! type -p ruby >/dev/null; then
-#   echo "Ruby not found on the system" >&2
-#   exit 1
-# fi
+# gh-orgtools version
+VERSION="0.0.1"
 
-# Pass arguments through to another command
-# gh issue list "$@" -R cli/cli
+PR_FILE=".git/PULLREQ_EDITMSG"
 
-# Using the gh api command to retrieve and format information
-# QUERY='
-#   query($endCursor: String) {
-#     viewer {
-#       repositories(first: 100, after: $endCursor) {
-#         nodes {
-#           nameWithOwner
-#           stargazerCount
-#         }
-#       }
-#     }
-#   }
-# '
-# TEMPLATE='
-#   {{- range $repo := .data.viewer.repositories.nodes -}}
-#     {{- printf "name: %s - stargazers: %v\n" $repo.nameWithOwner $repo.stargazerCount -}}
-#   {{- end -}}
-# '
-# exec gh api graphql -f query="${QUERY}" --paginate --template="${TEMPLATE}"
+PR_TEMPLATE_FILE=".github/pull_request_template.md"
+
+SCISSORS="------------------------ >8 ------------------------"
+
+# Prints the given message to STDERR
+#
+# $1 - Message
+warn() {
+  echo "${1:-}" >&2
+}
+
+# Prints the given message to STDERR and exits non zero.
+#
+# $1 - Message
+abort() {
+  warn "$(program_name): $1"
+  exit 1
+}
+
+# Pretty prints the current program name, eg: "gh prq"
+program_name() {
+  printf "%s\\n" "${0//*\/gh-/gh }"
+}
+
+# Finds the title in the given file (ie: the first line).
+find_title() {
+  local content
+
+  content="$(cat)"
+
+  sed -n "1p" <<< "$content"
+}
+
+# Finds the body in the given file (ie: all but the first line). Note that
+# leading/trailing blank lines are stripped too.
+find_body() {
+  local content
+
+  content="$(cat)"
+
+  if [[ $(wc -l <<< "$content") -gt 1 ]]; then
+    sed -n "1d;p" <<< "$content" | strip_lines
+  fi
+}
+
+# Strips blank lines from the start or end of the given text.
+#
+# See: https://stackoverflow.com/a/7363393
+#
+# Eg:
+#   { echo; echo one; echo } | strip_lines
+strip_lines() {
+  awk '
+    /[[:graph:]]/ { p=1; for (i=1; i<=n; i++) print ""; n=0; print; }
+    p && /^[[:space:]]*$/ { n++ }
+  '
+}
+
+# Fetch the git comment character
+#
+# This can be one of #, ;, @, !, $, %, ^, &, |, :, or auto.
+#
+# If auto is supplied, each character above is scaned in STDIN. If no lines
+# start with that character, it is returned.
+git_comment_char() {
+  local char input="$1" line
+
+  char=$(git config core.commentChar)
+  : "${char:=#}"
+
+  if [[ "$char" = auto ]]; then
+    local comment_char_candidates="#;@!$%^&|:"
+    local i=0
+
+    while (( i < ${#comment_char_candidates} )); do
+      char="${comment_char_candidates:i:1}"
+
+      i=$((i + 1))
+
+      local found=0
+
+      while IFS= read -r line; do
+        if [[ "${line:0:1}" = "$char" ]]; then
+          found=1
+          break
+        fi
+      done <<< "$input"
+
+      if [[ "$found" = 0 ]]; then
+        break
+      fi
+    done
+  fi
+
+  if [[ "$char" ]]; then
+    echo "$char"
+  else
+    abort "Couldn't determine git commentChar!"
+  fi
+}
+
+git_history() {
+  local base="$1" head="$2"
+
+  git -c log.showSignature=false \
+    log \
+    --no-color \
+    --format='%h (%aN, %ar)%n%w(78,3,3)%s%n%+b' \
+    --cherry \
+    "$base...$head"
+}
+
+generate_pr_template() {
+  local base=master comment_char
+
+  comment_char=$(git_comment_char "")
+
+  {
+    echo
+    echo
+
+    if [[ -r "$PR_TEMPLATE_FILE" ]]; then
+      cat "$PR_TEMPLATE_FILE"
+    fi
+
+    echo "$comment_char $SCISSORS"
+    echo "$comment_char Do not modify or remove the line above."
+    echo "$comment_char Everything below it will be ignored."
+    echo
+    echo "Requesting a pull to BASE from HEAD"
+    echo
+    echo "Write a message for this pull request. The first block"
+    echo "of text is the title and the rest is the description."
+    echo
+    echo "Changes:"
+
+    git_history master HEAD
+
+    # last_commit_message
+  }
+}
+
+format_pr_template() {
+  local comment_char
+
+  comment_char=$(git_comment_char "")
+
+  awk -v scissors="$comment_char $SCISSORS" \
+    '$0 ~ scissors { exit }; { print }' |
+    strip_lines
+}
+
+# Opens the PR in $EDITOR.
+edit_pr() {
+  case "$EDITOR" in
+    gvim|mvim|vim)
+      "$EDITOR" --cmd "set ft=gitcommit tw=0 wrap lbr" "$PR_FILE"
+      ;;
+    *)
+      "$EDITOR" "$PR_FILE"
+      ;;
+  esac
+}
+
+# Opens the URL in a web browser
+open_url() {
+  local url="$1"
+
+  case "$(uname)" in
+    Darwin)
+      open "$url"
+      ;;
+    Linux)
+      xdg-open "$url"
+      ;;
+    *)
+      abort "Don't know how to open URLs on $(uname)"
+      ;;
+  esac
+}
+
+copy_url() {
+  local url="$1"
+
+  case "$(uname)" in
+    Darwin)
+      echo "$url" | pbcopy
+      ;;
+    Linux)
+      echo "$url" | xclip -selection clipboard
+      ;;
+    *)
+      abort "Don't know how to copy URLs on $(uname)"
+      ;;
+  esac
+}
+
+# FLAGS
+#   -a, --assignee login       Assign people by their login. Use "@me" to self-assign.
+#   -B, --base branch          The branch into which you want your code merged
+#   -b, --body string          Body for the pull request
+#   -F, --body-file file       Read body text from file (use "-" to read from standard input)
+#   -d, --draft                Mark pull request as a draft
+#   -f, --fill                 Do not prompt for title/body and just use commit info
+#   -H, --head branch          The branch that contains commits for your pull request (default: current branch)
+#   -l, --label name           Add labels by name
+#   -m, --milestone name       Add the pull request to a milestone by name
+#       --no-maintainer-edit   Disable maintainer's ability to modify pull request
+#   -p, --project name         Add the pull request to projects by name
+#       --recover string       Recover input from a failed run of create
+#   -r, --reviewer handle      Request reviews from people or teams by their handle
+#   -t, --title string         Title for the pull request
+#   -w, --web                  Open the web browser to create a pull request
+
+# INHERITED FLAGS
+#       --help                     Show help for command
+#   -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format
+create_pull_request() {
+  local title="$1" body="$2"
+
+  shift 2
+
+  gh pr create --title "$title" --body "$body" "$@"
+}
+
+# Prints help text from the top of this file.
+#
+# $1 - `-h`, or `--help`. If `-h` is passed, only short `Usage:` info is
+# printed.
+print_help() {
+  sed -ne '/^#/!q;s/^#$/# /;/^# /s/^# //p' < "$0" |
+    awk -v f="${1#-h}" '!f&&/^Usage:/||u{u=!/^\s*$/;if(!u)exit}u||f'
+}
+
+# Main program
+main() {
+  local base head template body title output url copy open push
+
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      -P|--push)
+        push=1
+        shift
+        ;;
+      -C|--copy)
+        copy=1
+        shift
+        ;;
+      -O|--open)
+        open=1
+        shift
+        ;;
+      -V | --version | version)
+        echo "$(program_name) v$VERSION"
+        echo "https://github.com/itspriddle/gh-prq"
+        return 0
+        ;;
+      -h|--help)
+        print_help "$1"
+        return 0
+        ;;
+      --)
+        shift
+        break
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+
+  trap '[[ "${RECOVER:-0}" -eq 1 ]] || rm -f "$PR_FILE"' EXIT
+
+  if [[ "$push" ]]; then
+    git push -u origin HEAD
+  fi
+
+  if [[ ! -f "$PR_FILE" ]]; then
+    generate_pr_template > "$PR_FILE"
+  fi
+
+  edit_pr "$PR_FILE"
+
+  template="$(format_pr_template < "$PR_FILE")"
+
+  title="$(find_title <<< "$template")"
+
+  body="$(find_body <<< "$template")"
+
+  if [[ -z "$title" ]]; then
+    warn "Must specify a title for your Pull Request!"
+    return 1
+  fi
+
+  if output=$(create_pull_request "$title" "$body" "$@" 2>&1); then
+    url="$(grep github.com <<< "$output")"
+
+    echo "$url"
+
+    [[ "$open" ]] && open_url "$url"
+    [[ "$copy" ]] && copy_url "$url"
+  else
+    RECOVER=1
+
+    warn "Failed to create pull request!"
+    echo "$output"
+    return 1
+  fi
+}
+
+main "$@"
