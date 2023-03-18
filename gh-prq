@@ -283,7 +283,7 @@ edit_pr() {
   # Purposely not quoting $editor below to allow passing args in `GIT_EDITOR`
   case "$editor" in
     gvim|mvim|vim)
-      $editor --cmd "set ft=gitcommit tw=0 wrap lbr" "$PR_FILE"
+      $editor --cmd "set ft=pullrequest tw=0 wrap lbr" "$PR_FILE"
       ;;
     *)
       $editor "$PR_FILE"
