@@ -8,7 +8,26 @@
 #   gh prq [OPTIONS]
 #
 # DESCRIPTION
-#   FIXME
+#   Create GitHub Pull Requests with your $EDITOR.
+#
+#   This gh extension is meant to replace the functionality that `hub
+#   pull-request` provided using `gh pr create` instead.
+#
+#   If a Pull Request template is found in .github/pull_request_template.md it
+#   will be added when your $EDITOR is opened.
+#
+#   A list of commits in the Pull Request and their messages are also added to
+#   the Pull Request message in your $EDITOR. This information is not sent to
+#   GitHub when creating the Pull Request, however.
+#
+#   When you save and exit from your $EDITOR, the content written is sent as
+#   the Pull Request, with the first line as the Title and the remaining lines
+#   as the Body.
+#
+#   If the Pull Request is created successfully, the URL is printed to STDOUT.
+#   Otherwise, errors are printed to STDERR. In the event of an error, the
+#   Pull Request content is saved to .github/PULLREQ_EDITMSG, and a subsequent
+#   run of `gh prq` will open that file again.
 #
 # OPTIONS
 #   -P, --push
@@ -19,6 +38,15 @@
 #
 #   -O, --open
 #     Open the URL in your web browser.
+#
+# EDITOR
+#   Like `git commit`, `gh prq` will use the first available item from:
+#
+#   - $GIT_EDITOR
+#   - git config core.editor
+#   - $EDITOR
+#
+#   If none are found, `nano` is used.
 #
 # REPORTING BUGS
 #   Issues can be reported on GitHub:
