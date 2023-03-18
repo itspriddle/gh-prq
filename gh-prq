@@ -393,6 +393,12 @@ main() {
   # problem was corrected).
   trap '[[ "${RECOVER:-0}" -eq 1 ]] || rm -f "$PR_FILE"' EXIT
 
+  # Ensure this is a GitHub repo.
+  if [[ "$(git ls-remote --get-url 2> /dev/null)" != *"github"* ]]; then
+    warn "Error: Remote \`origin' is not on GitHub, or is not setup."
+    return 1
+  fi
+
   local branch
   branch=$(git symbolic-ref --short "$head")
 
