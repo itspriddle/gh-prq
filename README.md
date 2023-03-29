@@ -22,6 +22,9 @@ cd project
 gh prq
 ```
 
+If you have a `.github/pull_request_template.md` file in your project, it will
+be filled in your editor.
+
 Pass `--copy` to copy the Pull Request URL to your clipboard.
 
 Pass `--open` to open the Pull Request in your web browser.
