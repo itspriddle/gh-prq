@@ -417,7 +417,7 @@ main() {
     {
       echo
       echo
-      generate_pr_template "$base" "$head" "$(cat "$PR_TEMPLATE_FILE")"
+      generate_pr_template "$base" "$head" "$(cat "$PR_TEMPLATE_FILE" 2> /dev/null)"
     } > "$PR_FILE"
   else
     local prepend
