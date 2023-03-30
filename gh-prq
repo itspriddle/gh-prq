@@ -68,7 +68,7 @@ fi
 set -euo pipefail
 
 # gh-prq version
-VERSION="0.1.0"
+VERSION="0.1.1"
 
 # Path to the file used to edit a Pull Request message
 PR_FILE=".git/PULLREQ_EDITMSG"
