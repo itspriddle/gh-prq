@@ -413,7 +413,7 @@ main() {
 
   GIT_COMMENT_CHAR=$(git_comment_char)
 
-  base=$(git config --get init.defaultBranch || echo master)
+  base=$(git rev-parse --abbrev-ref origin/HEAD | sed 's@^origin/@@')
 
   if [[ ! -f "$PR_FILE" ]]; then
     {
