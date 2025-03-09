@@ -413,7 +413,9 @@ main() {
 
   GIT_COMMENT_CHAR=$(git_comment_char)
 
-  base=$(git rev-parse --abbrev-ref origin/HEAD | sed 's@^origin/@@')
+  base=$(git symbolic-ref refs/remotes/origin/head | sed 's@^refs/remotes/origin/@@')
+
+  [[ -z "$base" ]] && base=master
 
   if [[ ! -f "$PR_FILE" ]]; then
     {
