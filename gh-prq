@@ -353,7 +353,7 @@ print_help() {
 
 # Main program
 main() {
-  local base=master head=HEAD template body title output url copy open push
+  local base head=HEAD template body title output url copy open push
 
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
@@ -412,6 +412,10 @@ main() {
   fi
 
   GIT_COMMENT_CHAR=$(git_comment_char)
+
+  base=$(git symbolic-ref refs/remotes/origin/head | sed 's@^refs/remotes/origin/@@')
+
+  [[ -z "$base" ]] && base=master
 
   if [[ ! -f "$PR_FILE" ]]; then
     {
