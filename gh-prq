@@ -116,6 +116,14 @@ copy_url() {
   esac
 }
 
+# Strips blank lines from the start or end of the given text.
+strip_lines() {
+  awk '
+    /[[:graph:]]/{ p = 1; for (i = 1; i <= n; i++) print ""; n = 0; print }
+    p && /^[[:space:]]*$/ { n++ }
+  '
+}
+
 # Creates a pull request via `gh pr create`.
 #
 # $@ - arguments are passed directly to `gh pr create`
@@ -128,7 +136,7 @@ create_pull_request() {
   template="$(git rev-parse --show-toplevel)/$PR_TEMPLATE_FILE"
 
   if [[ -f "$template" ]]; then
-    args+=(--body "$(echo; cat "$template")")
+    args+=(--body "$(echo; strip_lines < "$template")")
   fi
 
   gh pr create "${args[@]}" "$@"
