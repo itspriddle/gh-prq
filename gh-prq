@@ -16,18 +16,12 @@
 #   If a Pull Request template is found in .github/pull_request_template.md it
 #   will be added when your $EDITOR is opened.
 #
-#   A list of commits in the Pull Request and their messages are also added to
-#   the Pull Request message in your $EDITOR. This information is not sent to
-#   GitHub when creating the Pull Request, however.
-#
 #   When you save and exit from your $EDITOR, the content written is sent as
 #   the Pull Request, with the first line as the Title and the remaining lines
 #   as the Body.
 #
 #   If the Pull Request is created successfully, the URL is printed to STDOUT.
-#   Otherwise, errors are printed to STDERR. In the event of an error, the
-#   Pull Request content is saved to .github/PULLREQ_EDITMSG, and a subsequent
-#   run of `gh prq` will open that file again.
+#   Otherwise, errors are printed to STDERR.
 #
 # OPTIONS
 #   -P, --push
@@ -38,15 +32,6 @@
 #
 #   -O, --open
 #     Open the URL in your web browser.
-#
-# EDITOR
-#   Like `git commit`, `gh prq` will use the first available item from:
-#
-#   - $GIT_EDITOR
-#   - git config core.editor
-#   - $EDITOR
-#
-#   If none are found, `nano` is used.
 #
 # REPORTING BUGS
 #   Issues can be reported on GitHub:
@@ -68,17 +53,10 @@ fi
 set -euo pipefail
 
 # gh-prq version
-VERSION="0.1.1"
-
-# Path to the file used to edit a Pull Request message
-PR_FILE=".git/PULLREQ_EDITMSG"
+VERSION="0.2.0"
 
 # Path to the file used as a Pull Request message template
 PR_TEMPLATE_FILE=".github/pull_request_template.md"
-
-# String used to separate content in a Pull Request message from help text.
-# All content found below this line will be stripped and not sent to GitHub.
-SCISSORS="------------------------ >8 ------------------------"
 
 # Prints the given message to STDERR
 #
@@ -98,197 +76,6 @@ abort() {
 # Pretty prints the current program name, eg: "gh prq"
 program_name() {
   printf "%s\\n" "${0//*\/gh-/gh }"
-}
-
-# Finds the PR title from STDIN (ie: the first line).
-find_title() {
-  local content
-
-  content="$(cat)"
-
-  sed -n "1p" <<< "$content"
-}
-
-# Finds the PR body from STDIN (ie: all but the first line). Note that
-# leading/trailing blank lines are stripped too.
-find_body() {
-  local content
-
-  content="$(cat)"
-
-  if [[ $(wc -l <<< "$content") -gt 1 ]]; then
-    sed -n "1d;p" <<< "$content" | strip_lines
-  fi
-}
-
-# Strips blank lines from the start or end of the given text.
-#
-# See: https://stackoverflow.com/a/7363393
-#
-# Eg:
-#   { echo; echo one; echo } | strip_lines
-strip_lines() {
-  awk '
-    /[[:graph:]]/ { p=1; for (i=1; i<=n; i++) print ""; n=0; print; }
-    p && /^[[:space:]]*$/ { n++ }
-  '
-}
-
-# Prints the last commit message. Used when git's `core.commentChar` is set to
-# `auto` to determine what the comment character should be.
-git_last_commit_message() {
-  git show --format='%s%n%n%b'
-}
-
-# Prints the git comment character.
-#
-# This can be one of #, ;, @, !, $, %, ^, &, |, :, or auto.
-#
-# If auto is supplied, each character above is scaned from STDIN. If no lines
-# start with that character, it is returned.
-git_comment_char() {
-  local char line
-
-  char=$(git config core.commentChar)
-  : "${char:=#}"
-
-  if [[ "$char" = auto ]]; then
-    local comment_char_candidates="#;@!$%^&|:"
-    local i=0
-    local last_commit
-    last_commit=$(git_last_commit_message)
-
-    while (( i < ${#comment_char_candidates} )); do
-      char="${comment_char_candidates:i:1}"
-
-      i=$((i + 1))
-
-      local found=0
-
-      while IFS= read -r line; do
-        if [[ "${line:0:1}" = "$char" ]]; then
-          found=1
-          break
-        fi
-      done <<< "$last_commit"
-
-      if [[ "$found" = 0 ]]; then
-        break
-      fi
-    done
-  fi
-
-  if [[ "$char" ]]; then
-    echo "$char"
-  else
-    abort "Couldn't determine git commentChar!"
-  fi
-}
-
-# Prints the git history for the given range. This is included in the Pull
-# Request template to help the author, but not sent to GitHub when creating
-# the Pull Request.
-#
-# $1 - base branch
-# $2 - head branch
-git_history() {
-  local base="$1" head="$2"
-
-  git -c log.showSignature=false \
-    log \
-    --no-color \
-    --format='%h (%aN, %ar)%n%w(78,3,3)%s%n%+b' \
-    --cherry \
-    "$base...$head"
-}
-
-# Generates the Pull Request template file.
-#
-# If a .github/issues_template.md file exists, it will be included in the
-# output. A list of commits between the base branch and head branch will also
-# be printed.
-#
-# $1 - base branch
-# $2 - head branch
-# $3 - content to prepend
-generate_pr_template() {
-  local base="$1" head="$2" prepend="${3-}"
-
-  {
-    if [[ "$prepend" ]]; then
-      echo "$prepend"
-    fi
-
-    echo "$GIT_COMMENT_CHAR $SCISSORS"
-    echo "$GIT_COMMENT_CHAR Do not modify or remove the line above."
-    echo "$GIT_COMMENT_CHAR Everything below it will be ignored."
-    echo
-    echo "Requesting a pull to $base from $head"
-    echo
-    echo "Write a message for this pull request. The first block"
-    echo "of text is the title and the rest is the description."
-    echo
-    echo "Changes:"
-    echo
-
-    git_history "$base" "$head"
-  }
-}
-
-# Formats the Pull Request template (via STDIN) after having been written by
-# $EDITOR. This strips away the first git scissors line and all lines after
-# it.
-format_pr_template() {
-  awk -v scissors="$GIT_COMMENT_CHAR $SCISSORS" \
-    '$0 ~ scissors { exit }; { print }' |
-    strip_lines
-}
-
-# Finds the appropriate $EDITOR.
-#
-# First, check if $GIT_EDITOR is assigned. If so use it.
-#
-# Next, check if `core.editor` is set in either `~/.gitconfig` or
-# `.git/config`. If so, use it.
-#
-# Next, use `$EDITOR` if available.
-#
-# Finally, fallback to `nano`.
-find_editor() {
-  local editor
-
-  editor=$(git var GIT_EDITOR)
-
-  if [[ "$editor" ]]; then
-    echo "$editor"
-    return 0
-  fi
-
-  editor=$(git config core.editor)
-
-  if [[ "$editor" ]]; then
-    echo "$editor"
-    return 0
-  fi
-
-  echo "${EDITOR:-nano}"
-}
-
-# Opens the Pull Request in $EDITOR.
-edit_pr() {
-  local editor
-
-  editor=$(find_editor)
-
-  # Purposely not quoting $editor below to allow passing args in `GIT_EDITOR`
-  case "$editor" in
-    gvim|mvim|vim)
-      $editor --cmd "set ft=pullrequest tw=0 wrap lbr" "$PR_FILE"
-      ;;
-    *)
-      $editor "$PR_FILE"
-      ;;
-  esac
 }
 
 # Opens the URL in a web browser
@@ -331,15 +118,20 @@ copy_url() {
 
 # Creates a pull request via `gh pr create`.
 #
-# $1 - PR title
-# $2 - PR body
-# $@ - all remaining arguments are passed directly to `gh pr`
+# $@ - arguments are passed directly to `gh pr create`
 create_pull_request() {
-  local title="$1" body="$2"
+  local template
+  local args=(--editor --fill-first)
 
-  shift 2
+  args+=(-H "$(git rev-parse --abbrev-ref HEAD)")
 
-  gh pr create --title "$title" --body "$body" "$@"
+  template="$(git rev-parse --show-toplevel)/$PR_TEMPLATE_FILE"
+
+  if [[ -f "$template" ]]; then
+    args+=(-F "$template")
+  fi
+
+  gh pr create "${args[@]}" "$@"
 }
 
 # Prints help text from the top of this file.
@@ -353,7 +145,7 @@ print_help() {
 
 # Main program
 main() {
-  local base head=HEAD template body title output url copy open push
+  local head=HEAD template url copy open push
 
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
@@ -388,11 +180,6 @@ main() {
     esac
   done
 
-  # Cleanup the $PR_FILE unless RECOVER is set to 1. This allows editing the
-  # PR message again if `gh pr create` failes for some reason (and the
-  # problem was corrected).
-  trap '[[ "${RECOVER:-0}" -eq 1 ]] || rm -f "$PR_FILE"' EXIT
-
   # Ensure this is a GitHub repo.
   if [[ "$(git ls-remote --get-url 2> /dev/null)" != *"github"* ]]; then
     warn "Error: Remote \`origin' is not on GitHub, or is not setup."
@@ -408,57 +195,16 @@ main() {
   fi
 
   if [[ "$push" ]]; then
-    git push -u origin "$branch"
+    git push -u origin "$branch" #| grep -v -e '^remote: '
   fi
 
-  GIT_COMMENT_CHAR=$(git_comment_char)
-
-  base=$(git symbolic-ref refs/remotes/origin/head | sed 's@^refs/remotes/origin/@@')
-
-  [[ -z "$base" ]] && base=master
-
-  if [[ ! -f "$PR_FILE" ]]; then
-    {
-      echo
-      echo
-      generate_pr_template "$base" "$head" "$(cat "$PR_TEMPLATE_FILE" 2> /dev/null)"
-    } > "$PR_FILE"
-  else
-    local prepend
-
-    prepend=$(format_pr_template < "$PR_FILE")
-
-    {
-      echo "$prepend"
-      generate_pr_template "$base" "$head"
-    } > "$PR_FILE"
-  fi
-
-  edit_pr "$PR_FILE"
-
-  template="$(format_pr_template < "$PR_FILE")"
-
-  title="$(find_title <<< "$template")"
-
-  body="$(find_body <<< "$template")"
-
-  if [[ -z "$title" ]]; then
-    warn "Must specify a title for your Pull Request!"
-    return 1
-  fi
-
-  if output=$(create_pull_request "$title" "$body" "$@" 2>&1); then
-    url="$(grep github.com <<< "$output")"
-
-    echo "$url"
+  if create_pull_request "$@" 2> /dev/null; then
+    url="$(gh pr view --json url --jq .url)"
 
     [[ "$open" ]] && open_url "$url"
     [[ "$copy" ]] && copy_url "$url"
   else
-    RECOVER=1
-
     warn "Failed to create Pull Request!"
-    warn "$output"
     return 1
   fi
 }
