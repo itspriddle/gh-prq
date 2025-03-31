@@ -174,7 +174,7 @@ main() {
         echo "https://github.com/itspriddle/gh-prq"
         return 0
         ;;
-      -h|--help|help)
+      -h|--help)
         print_help "$1"
         return 0
         ;;
