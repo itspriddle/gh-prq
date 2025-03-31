@@ -128,7 +128,7 @@ create_pull_request() {
   template="$(git rev-parse --show-toplevel)/$PR_TEMPLATE_FILE"
 
   if [[ -f "$template" ]]; then
-    args+=(-F "$template")
+    args+=(--body "$(echo; cat "$template")")
   fi
 
   gh pr create "${args[@]}" "$@"
