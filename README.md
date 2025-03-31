@@ -22,8 +22,12 @@ cd project
 gh prq
 ```
 
-If you have a `.github/pull_request_template.md` file in your project, it will
-be filled in your editor.
+Behind the scenes, `gh prq` uses `gh pr create --editor -H BRANCH
+--fill-first`. This opens your `$EDITOR` using the contents of the current
+branch's first commit message as the Pull Request title. If there's a
+`.github/pull_request_template.md` file at the root of the repository, its
+contents will be added as the `--body` argument, ready to edit in your
+`$EDITOR`.
 
 Pass `--copy` to copy the Pull Request URL to your clipboard.
 
@@ -39,51 +43,45 @@ git config --global --add alias.prq '!gh prq --copy --open --push'
 
 ## Editor Examples
 
-By default, `gh prq` will use the same editor that `git commit` would. Git
-determines that by checking for the first of:
+By default, `gh prq` will use the same editor that `gh pr create --editor`
+would use. `gh`  determines that by checking for one of:
 
+- `gh config editor`
 - `$GIT_EDITOR`
 - `git config core.editor`
 - `$EDITOR`
 
-If you want to configure one, set one of the following in your `~/.bashrc` or
-`~/.zshrc` file:
+If you want to configure one, `gh config set editor <editor>` is your best
+bet. Run one of the following:
 
 Vim:
 
 ```sh
-export GIT_EDITOR="vim"
+gh config set editor vim
 ```
 
 MacVim:
 
 ```sh
-export GIT_EDITOR="mvim"
+gh config set editor mvim
 ```
 
 Emacs:
 
 ```sh
-export GIT_EDITOR="emacs"
+gh config set editor emacs
 ```
 
 VSCode:
 
 ```sh
-export GIT_EDITOR="code --wait"
+gh config set editor "code --wait"
 ```
 
 Sublime Text:
 
 ```sh
-export GIT_EDITOR="subl --wait"
-```
-
-If you prefer to use `~/.gitconfig`, you can use something like:
-
-```sh
-git config --global --add core.editor "vim"
-git config --global --add core.editor "code --wait"
+gh config set editor "subl --wait"
 ```
 
 ## Bug Reports
