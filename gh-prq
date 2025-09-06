@@ -142,6 +142,10 @@ create_pull_request() {
   gh pr create "${args[@]}" "$@"
 }
 
+gh_default_branch() {
+  gh repo view --json defaultBranchRef --jq .defaultBranchRef.name
+}
+
 # Prints help text from the top of this file.
 #
 # $1 - `-h`, or `--help`. If `-h` is passed, only short `Usage:` info is
@@ -197,8 +201,8 @@ main() {
   local branch
   branch=$(git symbolic-ref --short "$head")
 
-  if [[ "$branch" =~ ^(master|main)$ ]]; then
-    warn "Error: You are on \`$branch', checkout a new branch first!"
+  if [[ "$branch" == "$(gh_default_branch)" ]]; then
+    warn "Error: You are on your default \`$branch' branch, checkout a new branch first!"
     return 1
   fi
 
