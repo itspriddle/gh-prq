@@ -33,6 +33,9 @@
 #   -O, --open
 #     Open the URL in your web browser.
 #
+#   -E, --no-editor
+#     Don't use --editor --fill-first flags with gh pr create.
+#
 # REPORTING BUGS
 #   Issues can be reported on GitHub:
 #
@@ -126,10 +129,17 @@ strip_lines() {
 
 # Creates a pull request via `gh pr create`.
 #
-# $@ - arguments are passed directly to `gh pr create`
+# $1 - "editor" or "no-editor" to control --editor --fill-first flags
+# $@ - remaining arguments are passed directly to `gh pr create`
 create_pull_request() {
-  local template
-  local args=(--editor --fill-first)
+  local template editor_mode="$1"
+  local args=()
+
+  shift
+
+  if [[ "$editor_mode" == "editor" ]]; then
+    args+=(--editor --fill-first)
+  fi
 
   args+=(-H "$(git rev-parse --abbrev-ref HEAD)")
 
@@ -157,7 +167,7 @@ print_help() {
 
 # Main program
 main() {
-  local head=HEAD template url copy open push
+  local head=HEAD template url copy open push editor_mode=editor
 
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
@@ -171,6 +181,10 @@ main() {
         ;;
       -O|--open)
         open=1
+        shift
+        ;;
+      -E|--no-editor)
+        editor_mode=no-editor
         shift
         ;;
       -V|--version|version)
@@ -210,7 +224,7 @@ main() {
     git push -u origin "$branch" #| grep -v -e '^remote: '
   fi
 
-  if create_pull_request "$@"; then
+  if create_pull_request "$editor_mode" "$@"; then
     url="$(gh pr view --json url --jq .url)"
 
     [[ "${open-}" ]] && open_url "$url"
